@@ -1,0 +1,35 @@
+name: Ordered build
+
+on:
+  push:
+    branches: [main]
+
+# One run at a time per branch; queued runs wait instead of cancelling the one in progress.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BASE: "0" # build number when this workflow was added; next build = BASE + 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute build number
+        run: echo "BUILD=$((BASE + ${{ github.run_number }}))" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: npm ci && npm run build
+
+      - name: Tag build
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/build-$BUILD" >/dev/null; then
+            echo "build-$BUILD already exists (re-run); not re-tagging."; exit 0
+          fi
+          git tag "build-$BUILD" "$GITHUB_SHA"
+          git push origin "build-$BUILD"
